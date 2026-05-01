@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Studio Broadcast Receiver</title>
+    <style>
+        /* 🎛️ 전체 테마: 스튜디오의 어둡고 차분한 조명 느낌 */
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background: radial-gradient(circle at center, #2c2f33 0%, #111214 100%); 
+            display: flex; justify-content: center; align-items: center; 
+            min-height: 100vh; color: #b9bbbe; padding: 15px;
+        }
+
+        /* 📻 랙 마운트(Rack Mount) 스타일의 메탈 본체 */
+        .radio-device {
+            width: 100%; max-width: 480px;
+            background: linear-gradient(to bottom, #2a2c31, #1e1f23);
+            border-radius: 6px; 
+            box-shadow: 0 15px 40px rgba(0,0,0,0.8), 
+                        inset 0 1px 1px rgba(255,255,255,0.1), 
+                        inset 0 -2px 5px rgba(0,0,0,0.4);
+            padding: 30px 20px; 
+            border: 1px solid #141518;
+            position: relative;
+        }
+
+        /* 스튜디오 장비 나사 구멍 디자인 (디테일) */
+        .radio-device::before, .radio-device::after {
+            content:''; position: absolute; top: 15px; width: 8px; height: 8px;
+            background: #111; border-radius: 50%; box-shadow: inset 0 1px 2px rgba(0,0,0,0.8);
+        }
+        .radio-device::before { left: 15px; }
+        .radio-device::after { right: 15px; }
+
+        .brand-header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 20px; padding: 0 10px;
+        }
+        .brand-name {
+            font-size: 0.8rem; text-transform: uppercase; letter-spacing: 2px;
+            color: #72767d; font-weight: bold; text-shadow: 0 -1px 0 #000;
+        }
+        
+        /* ON AIR 방송국 지시등 */
+        .on-air-light {
+            font-size: 0.7rem; font-weight: bold; letter-spacing: 1px;
+            color: #4a1919; border: 1px solid #4a1919; padding: 2px 6px; border-radius: 3px;
+            transition: 0.3s;
+        }
+        .on-air-light.active {
+            color: #ff3b30; border-color: #ff3b30;
+            text-shadow: 0 0 8px rgba(255, 59, 48, 0.8);
+            box-shadow: inset 0 0 8px rgba(255, 59, 48, 0.3), 0 0 10px rgba(255, 59, 48, 0.2);
+        }
+
+        /* 📟 VFD (진공형광디스플레이) 모니터 패널 */
+        .display-panel {
+            background: #090a0c;
+            border: 2px solid #18191c; border-radius: 4px;
+            padding: 20px; margin-bottom: 25px; 
+            box-shadow: inset 0 0 15px rgba(0,0,0,0.9), 0 1px 0 rgba(255,255,255,0.05);
+            border-bottom: 3px solid #111;
+        }
+        
+        .screen-text {
+            /* 스튜디오 장비 특유의 형광 시안(Cyan) 색상 */
+            color: #00e5ff; 
+            font-family: 'Courier New', Courier, monospace;
+            text-shadow: 0 0 6px rgba(0, 229, 255, 0.4);
+            text-align: center;
+        }
+        #led-status { font-size: 0.8rem; margin-bottom: 8px; opacity: 0.8; }
+        #led-station { font-size: 1.2rem; font-weight: bold; min-height: 1.4em; word-break: break-all; letter-spacing: 1px;}
+
+        /* 기계식 노브/스위치 느낌의 선택창 */
+        .search-steps { display: flex; flex-direction: column; gap: 15px; margin-bottom: 25px; }
+        .step-group { display: flex; flex-direction: column; gap: 6px; }
+        .step-label { font-size: 0.7rem; color: #8e9297; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; }
+        
+        select {
+            appearance: none; background: #202225; color: #dcddde;
+            border: 1px solid #18191c; padding: 12px; border-radius: 4px;
+            font-size: 0.95rem; cursor: pointer; outline: none;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);
+        }
+        select:focus { border-color: #00e5ff; box-shadow: 0 0 0 1px #00e5ff; }
+
+        /* 장비 스캔 버튼 */
+        .tune-btn {
+            background: linear-gradient(to bottom, #4f545c, #36393f);
+            color: #fff; border: 1px solid #202225; padding: 14px;
+            border-radius: 4px; font-size: 0.95rem; font-weight: bold;
+            letter-spacing: 2px; cursor: pointer; transition: 0.1s;
+            box-shadow: 0 3px 0 #18191c, 0 4px 6px rgba(0,0,0,0.3);
+            text-shadow: 0 -1px 0 #000;
+        }
+        .tune-btn:active { transform: translateY(3px); box-shadow: 0 0 0 #18191c, 0 1px 2px rgba(0,0,0,0.3); }
+
+        /* 하단 데크(재생/리스트) */
+        .deck-area {
+            display: grid;
+            grid-template-columns: 80px 1fr;
+            gap: 15px;
+            align-items: stretch;
+            border-top: 1px solid #3e4146;
+            padding-top: 20px;
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.02);
+        }
+        
+        /* 묵직한 메인 플레이 버튼 */
+        .play-btn {
+            background: linear-gradient(to bottom, #36393f, #202225);
+            color: #72767d; border: 1px solid #18191c;
+            border-radius: 6px; cursor: pointer; display: flex; flex-direction: column;
+            justify-content: center; align-items: center; gap: 5px;
+            box-shadow: 0 4px 0 #111, 0 5px 10px rgba(0,0,0,0.5);
+            transition: 0.1s;
+        }
+        .play-btn:active { transform: translateY(4px); box-shadow: 0 0 0 #111; }
+        .play-btn.playing { color: #43b581; text-shadow: 0 0 8px rgba(67, 181, 129, 0.5); border-color: #2b4f3b; }
+        .btn-icon { font-size: 1.5rem; }
+        .btn-text { font-size: 0.7rem; font-weight: bold; letter-spacing: 1px; }
+
+        /* 모니터링 리스트 창 */
+        .list-window {
+            background: #18191c; border-radius: 4px; height: 160px;
+            overflow-y: auto; border: 1px solid #111;
+            box-shadow: inset 0 2px 8px rgba(0,0,0,0.5);
+        }
+        .station-item {
+            padding: 12px 15px; border-bottom: 1px solid #202225; cursor: pointer;
+            display: flex; flex-direction: column; gap: 4px; border-left: 3px solid transparent;
+        }
+        .station-item:hover { background-color: #292b2f; border-left-color: #00e5ff; }
+        .st-name { color: #dcddde; font-size: 0.9rem; font-weight: 600; }
+        .st-tags { color: #72767d; font-size: 0.75rem; text-transform: uppercase;}
+
+        .list-window::-webkit-scrollbar { width: 8px; }
+        .list-window::-webkit-scrollbar-track { background: #18191c; }
+        .list-window::-webkit-scrollbar-thumb { background: #2f3136; border-radius: 4px; }
+
+        .no-data { padding: 30px 15px; text-align: center; color: #8e9297; font-size: 0.85rem; line-height: 1.6; }
+        
+        /* 숨겨진 오디오 소스 */
+        audio { display: none; }
+    </style>
+</head>
+<body>
+
+<div class="radio-device">
+    <div class="brand-header">
+        <div class="brand-name">STUDIO TUNER MK-II</div>
+        <div id="on-air-indicator" class="on-air-light">ON AIR</div>
+    </div>
+
+    <div class="display-panel">
+        <div id="led-status" class="screen-text">SYS.STANDBY</div>
+        <div id="led-station" class="screen-text">AWAITING INPUT</div>
+    </div>
+
+    <div class="search-steps">
+        <div class="step-group">
+            <div class="step-label">FREQ. REGION (COUNTRY)</div>
+            <select id="country-select">
+                <option value="">-- SELECT REGION --</option>
+                <optgroup label="Asia & Oceania">
+                    <option value="KR">Korea, South (대한민국)</option>
+                    <option value="JP">Japan (일본)</option>
+                    <option value="CN">China (중국)</option>
+                    <option value="TW">Taiwan (대만)</option>
+                    <option value="AU">Australia (호주)</option>
+                    <option value="NZ">New Zealand (뉴질랜드)</option>
+                    <option value="IN">India (인도)</option>
+                    <option value="ID">Indonesia (인도네시아)</option>
+                    <option value="TH">Thailand (태국)</option>
+                    <option value="VN">Vietnam (베트남)</option>
+                </optgroup>
+                <optgroup label="Americas">
+                    <option value="US">United States (미국)</option>
+                    <option value="CA">Canada (캐나다)</option>
+                    <option value="MX">Mexico (멕시코)</option>
+                    <option value="BR">Brazil (브라질)</option>
+                    <option value="AR">Argentina (아르헨티나)</option>
+                    <option value="CL">Chile (칠레)</option>
+                    <option value="CO">Colombia (콜롬비아)</option>
+                </optgroup>
+                <optgroup label="Europe">
+                    <option value="GB">United Kingdom (영국)</option>
+                    <option value="FR">France (프랑스)</option>
+                    <option value="DE">Germany (독일)</option>
+                    <option value="IT">Italy (이탈리아)</option>
+                    <option value="ES">Spain (스페인)</option>
+                    <option value="RU">Russia (러시아)</option>
+                    <option value="NL">Netherlands (네덜란드)</option>
+                    <option value="CH">Switzerland (스위스)</option>
+                    <option value="SE">Sweden (스웨덴)</option>
+                    <option value="NO">Norway (노르웨이)</option>
+                    <option value="FI">Finland (핀란드)</option>
+                    <option value="IE">Ireland (아일랜드)</option>
+                    <option value="PT">Portugal (포르투갈)</option>
+                    <option value="GR">Greece (그리스)</option>
+                    <option value="PL">Poland (폴란드)</option>
+                    <option value="UA">Ukraine (우크라이나)</option>
+                </optgroup>
+                <optgroup label="Middle East & Africa">
+                    <option value="AE">U.A.E (아랍에미리트)</option>
+                    <option value="SA">Saudi Arabia (사우디아라비아)</option>
+                    <option value="TR">Turkey (튀르키예)</option>
+                    <option value="IL">Israel (이스라엘)</option>
+                    <option value="ZA">South Africa (남아프리카 공화국)</option>
+                    <option value="EG">Egypt (이집트)</option>
+                    <option value="MA">Morocco (모로코)</option>
+                </optgroup>
+            </select>
+        </div>
+
+        <div class="step-group">
+            <div class="step-label">PROGRAM TYPE (GENRE)</div>
+            <select id="genre-select">
+                <option value="">-- ALL PROGRAMS --</option>
+                <option value="news">News & Current Affairs</option>
+                <option value="talk">Talk & Speech</option>
+                <option value="classical">Classical Music</option>
+                <option value="jazz">Jazz & Blues</option>
+                <option value="pop">Pop Music</option>
+                <option value="rock">Rock Music</option>
+                <option value="electronic">Electronic / Dance</option>
+                <option value="sports">Sports Broadcast</option>
+            </select>
+        </div>
+
+        <button id="search-btn" class="tune-btn">SCAN FREQUENCIES</button>
+    </div>
+
+    <div class="deck-area">
+        <button id="play-btn" class="play-btn">
+            <span id="btn-icon" class="btn-icon">▶</span>
+            <span id="btn-text" class="btn-text">PLAY</span>
+        </button>
+        
+        <div class="list-window">
+            <ul id="station-list">
+                <li class="no-data">Select region and program type,<br>then press SCAN to find signals.</li>
+            </ul>
+        </div>
+    </div>
+    
+    <audio id="audio-player"></audio>
+</div>
+
+<script>
+    const audioPlayer = document.getElementById('audio-player');
+    const playBtn = document.getElementById('play-btn');
+    const btnIcon = document.getElementById('btn-icon');
+    const btnText = document.getElementById('btn-text');
+    const ledStatus = document.getElementById('led-status');
+    const ledStation = document.getElementById('led-station');
+    const stationList = document.getElementById('station-list');
+    const searchBtn = document.getElementById('search-btn');
+    const onAirIndicator = document.getElementById('on-air-indicator');
+
+    let isPlaying = false;
+    let currentUrl = '';
+
+    async function performSearch() {
+        const countryCode = document.getElementById('country-select').value;
+        const genre = document.getElementById('genre-select').value;
+
+        if(!countryCode) {
+            alert("지역(국가)을 먼저 선택해 주십시오.");
+            return;
+        }
+
+        ledStatus.innerText = "SCANNING...";
+        ledStation.innerText = "SEARCHING BANDS";
+        stationList.innerHTML = '<li class="no-data">주파수 탐색 중...</li>';
+
+        let url = `https://de1.api.radio-browser.info/json/stations/search?limit=100&is_https=true&hidebroken=true&order=clickcount&reverse=true`;
+        url += `&countrycode=${countryCode}`;
+        if(genre) url += `&tag=${encodeURIComponent(genre)}`;
+
+        try {
+            const response = await fetch(url);
+            const stations = await response.json();
+
+            if (stations.length === 0) {
+                ledStatus.innerText = "NO SIGNAL";
+                ledStation.innerText = "FREQ EMPTY";
+                stationList.innerHTML = `
+                    <li class="no-data">
+                        송출 중인 신호가 없습니다.<br>
+                        <small style="color:#4f545c; margin-top:5px; display:block;">* HTTPS 보안 프로토콜을 지원하는 방송국만 스캔됩니다.</small>
+                    </li>`;
+                return;
+            }
+
+            ledStatus.innerText = `FOUND: ${stations.length} SIGS`;
+            ledStation.innerText = "SELECT STATION";
+            stationList.innerHTML = '';
+
+            stations.forEach(station => {
+                const li = document.createElement('li');
+                li.className = 'station-item';
+                const topTag = station.tags ? station.tags.split(',')[0].trim() : 'BROADCAST';
+                
+                li.innerHTML = `
+                    <div class="st-name">${station.name || 'UNKNOWN ID'}</div>
+                    <div class="st-tags">[${topTag}] ${station.codec || 'MP3'}</div>
+                `;
+                li.onclick = () => selectStation(station.url_resolved, station.name);
+                stationList.appendChild(li);
+            });
+        } catch (error) {
+            ledStatus.innerText = "SYS.ERROR";
+            ledStation.innerText = "OFFLINE";
+            stationList.innerHTML = '<li class="no-data" style="color:#f04747">통신 오류가 발생했습니다.</li>';
+        }
+    }
+
+    function selectStation(url, name) {
+        currentUrl = url;
+        ledStatus.innerText = "TUNED IN";
+        ledStation.innerText = name.toUpperCase(); 
+        audioPlayer.src = url;
+        startPlayback();
+    }
+
+    function startPlayback() {
+        audioPlayer.play().then(() => {
+            isPlaying = true;
+            btnIcon.innerText = "■";
+            btnText.innerText = "STOP";
+            playBtn.classList.add('playing');
+            onAirIndicator.classList.add('active'); // ON AIR 불 켜짐
+        }).catch(e => {
+            ledStatus.innerText = "STREAM ERR";
+            ledStation.innerText = "CONNECTION FAILED";
+            isPlaying = false;
+        });
+    }
+
+    function stopPlayback() {
+        audioPlayer.pause();
+        audioPlayer.src = ""; 
+        audioPlayer.src = currentUrl;
+        isPlaying = false;
+        btnIcon.innerText = "▶";
+        btnText.innerText = "PLAY";
+        playBtn.classList.remove('playing');
+        onAirIndicator.classList.remove('active'); // ON AIR 불 꺼짐
+        ledStatus.innerText = "SYS.STANDBY";
+    }
+
+    playBtn.addEventListener('click', () => {
+        if(isPlaying) stopPlayback();
+        else if(currentUrl) startPlayback();
+    });
+
+    searchBtn.addEventListener('click', performSearch);
+</script>
+
+</body>
+</html>
